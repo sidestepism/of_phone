@@ -32,7 +32,7 @@ void testApp::setup(){
 
     // setup buffer
     recBufferCounter = 0;
-    recBufferSize = 1024;
+    recBufferSize = 128;
     playBufferCounter = 0;
     playBufferSize = 1024;
 
@@ -158,19 +158,19 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
 	curVol = sqrt( curVol );
 
     // down sampling from 48000hz -> 8000hz
-    for (int i = 0; i < bufferSize; i+= 6){
+    // down sampling from 48000hz -> 9600hz
+    for (int i = 0; i < bufferSize; i+= 5){
         if(recBufferCounter >= recBufferSize){
             this->sendData();
 //            cout << "Rec buffer is full" << endl;
             break;
         }
-        int raw = (128 + (128 * inputTemp[i]));
+        int raw = (128 + (128 * inputTemp[i]) * 2);
         if(raw > 255)raw = 255;
         else if(raw < 0)raw = 0;
         recBuffer[recBufferCounter++] = (unsigned short) raw;
+        
 //      cout << input[i] << endl;
-        recBufferCounter++;
-
     }
 //    cout << "Rec buffer input" << recBufferCounter << " / " << recBufferSize << endl;
 
@@ -231,8 +231,8 @@ void testApp::sendData(){
 //
     for (int i = 0; i < recBufferSize; i++){
         // 矩形波
-        recBuffer[i] = i % 4 > 1 ? 192 : 64;
-//        cout << (int)recBuffer[i] << endl;
+//          recBuffer[i] = i % 2 ? 128 - 8 : 128 + 8;
+//          cout << (int)recBuffer[i] << endl;
     }
 
     serial.writeBytes(recBuffer, recBufferSize);
