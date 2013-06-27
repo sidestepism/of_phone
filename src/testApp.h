@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ofMain.h"
+#include "ofxNetwork.h"
 
 class testApp : public ofBaseApp{
 
@@ -39,6 +40,7 @@ public:
     int recBufferCounter;
     int recBufferSize;
     unsigned char recBuffer[1024];
+    float inputTemp[1024];
     unsigned char recTemp[1024];
 
 
@@ -48,4 +50,6 @@ public:
     unsigned char playTemp[1024];
 
     ofSoundStream soundStream;
+    ofxUDPManager udpConnection;
+    ofxTCPClient tcpClient;
 };

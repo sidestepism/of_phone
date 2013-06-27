@@ -1,4 +1,5 @@
 #include "testApp.h"
+#include "ofxNetwork.h"
 #include <string.h>
 
 //-------------------------------------------------------------
@@ -38,7 +39,20 @@ void testApp::setup(){
     memset(recBuffer, 0, 1024);
     memset(playBuffer, 0, 1024);
 
-	soundStream.setup(this, 0, 1, 48000, bufferSize, 4);
+	soundStream.setup(this, 2, 1, 48000, bufferSize, 4);
+
+
+
+    // udp setup
+    udpConnection.Create();
+	udpConnection.Connect("127.0.0.1",11999);
+	udpConnection.SetNonBlocking(true);
+
+    // tcp setup
+    tcpClient.setup("127.0.0.1", 11999);
+	// optionally set the delimiter to something else.  The delimter in the client and the server have to be the same
+	tcpClient.setVerbose(true);
+	tcpClient.setMessageDelimiter("\n");
 }
 
 //--------------------------------------------------------------
@@ -63,8 +77,10 @@ void testApp::draw(){
      */
 
 	ofSetColor(225);
+    string ip = tcpClient.getIP();
 	ofDrawBitmapString("AUDIO INPUT EXAMPLE", 32, 32);
 	ofDrawBitmapString("press 's' to unpause the audio\n'e' to pause the audio", 31, 92);
+	ofDrawBitmapString(ip, 31, 48);
 
 	ofNoFill();
 
@@ -84,7 +100,7 @@ void testApp::draw(){
 
     ofBeginShape();
     for (int i = 0; i < recBufferSize; i++){
-        ofVertex(i*2, 100 -recTemp[i]*180.0f);
+        ofVertex(i*2, 100 -inputTemp[i]*180.0f);
     }
     ofEndShape(false);
 
@@ -128,12 +144,11 @@ void testApp::draw(){
 //--------------------------------------------------------------
 void testApp::audioIn(float * input, int bufferSize, int nChannels){
 	float curVol = 0.0;
-
 	int numCounted = 0;
 
 	for (int i = 0; i < bufferSize; i++){
-		recTemp[i]		= input[i]*0.5;
-		curVol += recTemp[i] * recTemp[i];
+		inputTemp[i]		= input[i] * 0.5;
+		curVol += inputTemp[i] * inputTemp[i];
 		numCounted+=1;
 	}
 
@@ -143,23 +158,21 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
 	// this is how we get the root of rms
 	curVol = sqrt( curVol );
 
-	//lets go through each sample and calculate the root mean square which is a rough way to calculate volume
-	for (int i = 0; i < bufferSize; i++){
-		recTemp[i]		= input[i]*0.5;
-		curVol += recTemp[i] * recTemp[i];
-		numCounted+=1;
-	}
-
     // down sampling from 48000hz -> 8000hz
     for (int i = 0; i < bufferSize; i+= 6){
         if(recBufferCounter >= recBufferSize){
             this->sendData();
-            cout << "Rec buffer is full" << endl;
+//            cout << "Rec buffer is full" << endl;
             break;
         }
-        recBuffer[recBufferCounter++] = (unsigned short) (128 + (256 * recTemp[i]) * 4);
+        int raw = (128 + (128 * inputTemp[i]));
+        if(raw > 255)raw = 255;
+        else if(raw < 0)raw = 0;
+        recBuffer[recBufferCounter++] = (unsigned short) raw;
+//      cout << input[i] << endl;
+
     }
-    cout << "Rec buffer input" << recBufferCounter << " / " << recBufferSize << endl;
+//    cout << "Rec buffer input" << recBufferCounter << " / " << recBufferSize << endl;
 
 	smoothedVol *= 0.93;
 	smoothedVol += 0.07 * curVol;
@@ -169,55 +182,56 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
      reading from serial
      */
 
-//    unsigned char readBuffer[1024];
-//    memset(readBuffer, 0, 1024);
-//    int bytes = serial.readBytes(readBuffer, playBufferSize);
-//
-//    cout << "readBuffer: " << endl;
-//    cout << readBuffer << endl;
-//
+    unsigned char readBuffer[1024];
+    memset(readBuffer, 0, 1024);
+    int bytes = serial.readBytes(readBuffer, playBufferSize);
+
+//   cout << "readBuffer: " << endl;
+//   cout << readBuffer << endl;
+
 //    for(int i = 0; i < bytes; i++){
 //        cout << (unsigned short)readBuffer[i] << " ";
 //    }
-//
-//    cout << endl;
-//
-//    if ( bytes == OF_SERIAL_ERROR )
-//    {
-//        cout << "unrecoverable error reading from serial" << endl;
-//        // bail out
-//    }
-//    else if ( bytes == OF_SERIAL_NO_DATA )
-//    {
-//        cout << "no data" << endl;
-//        // nothing was read, try again
-//    }
-//    else
-//    {
+
+    // cout << endl;
+
+    if ( bytes == OF_SERIAL_ERROR )
+    {
+//\        cout << "unrecoverable error reading from serial" << endl;
+        return 0;
+        // bail out
+    }
+    else if ( bytes == OF_SERIAL_NO_DATA )
+    {
+        // cout << "no data" << endl;
+        // nothing was read, try again
+    }
+    else
+    {
 //        cout << "data received: " << bytes << " bytes" << endl;
 //
 //        cout << endl;
-//
-//        if(playBufferCounter < playBufferSize){
-//            memcpy(&playBuffer[playBufferCounter], readBuffer, playBufferSize - playBufferCounter);
-//            playBufferCounter += bytes;
-//            if(playBufferCounter >= playBufferSize){
-//                playBufferCounter = playBufferSize;
+
+        if(playBufferCounter < playBufferSize){
+            memcpy(&playBuffer[playBufferCounter], readBuffer, playBufferSize - playBufferCounter);
+            playBufferCounter += bytes;
+            if(playBufferCounter >= playBufferSize){
+                playBufferCounter = playBufferSize;
 //                cout << "Play buffer is full" << endl;
-//            }
-//            // we read some data!
-//        }
-//    }
+            }
+            // we read some data!
+        }
+    }
 
 }
 
 
 void testApp::sendData(){
-    cout << "Rec buffer dump:" << endl;
-
-    for (int i = 0; i < recBufferSize; i++){
-        cout << (int)recBuffer[i] << endl;
-    }
+//    cout << "Rec buffer dump:" << recBufferSize << endl;
+//
+//    for (int i = 0; i < recBufferSize; i++){
+//        cout << (int)recBuffer[i] << endl;
+//    }
 
     serial.writeBytes(recBuffer, recBufferSize);
 
@@ -230,24 +244,24 @@ void testApp::sendData(){
 void testApp::audioOut(float * output, int bufferSize, int nChannels){
     assert(playBufferCounter >= 0);
 
-    cout << "Audio out (bufsize: " << bufferSize << ", playBufferCounter" << playBufferCounter << endl;
+//    cout << "Audio out (bufsize: " << bufferSize << ", playBufferCounter" << playBufferCounter << endl;
 
-    if(playBufferCounter < bufferSize) return;
+//    if(playBufferCounter < bufferSize) return;
 
     // up sampling from 8000hz -> 48000hz
     int frame = 0;
     for (int i = 0; i < bufferSize; i++){
         frame = floor(i / 6);
-        float sample = ((float)(playBuffer[frame]) - 128) / 256;
 
-        if(playBuffer[frame] == 0){
-            sample = 0;
-        }
-        if(i % 6 == 0){
-            cout << (unsigned short)playBuffer[frame] << ": " << sample << endl;
-        }
-        output[i*nChannels    ] = sample;
-        output[i*nChannels + 1] = sample;
+        float sample = (((float)(playBuffer[frame]) - 128) / 256) * 0.5;
+
+//        if(playBuffer[frame] == 0){
+//            sample = 0;
+//        }
+//        cout << (unsigned short)playBuffer[frame] << ": " << sample << endl;
+
+        output[i*2    ] = sample;
+        output[i*2 + 1] = sample;
     }
 
     // playbuf    0 1 2 3 4 5 6 (playBufferCounter: 7, frame = 3)
@@ -276,12 +290,12 @@ void testApp::audioOut(float * output, int bufferSize, int nChannels){
     // playtemp   4 5 6 - - - - (playBufferCounter: 3, frame = 3)
     // ok!
 
-    cout << "playBuffer";
-    for(int i = 0; i < playBufferCounter; i++){
-        cout << (unsigned short)playBuffer[i] << " ";
-    }
-
-    cout << endl;
+//    cout << "playBuffer";
+//    for(int i = 0; i < playBufferCounter; i++){
+//        cout << (unsigned short)playBuffer[i] << " ";
+//    }
+//
+//    cout << endl;
 }
 
 
