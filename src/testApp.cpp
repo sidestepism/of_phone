@@ -32,7 +32,7 @@ void testApp::setup(){
 
     // setup buffer
     recBufferCounter = 0;
-    recBufferSize = 128;
+    recBufferSize = 1024;
     playBufferCounter = 0;
     playBufferSize = 1024;
 
@@ -45,13 +45,13 @@ void testApp::setup(){
 
     // udp setup
     udpConnection.Create();
-	udpConnection.Connect("127.0.0.1",11999);
+	udpConnection.Connect("127.0.0.1", 80);
 	udpConnection.SetNonBlocking(true);
 
     // tcp setup
-    tcpClient.setup("127.0.0.1", 11999);
-	// optionally set the delimiter to something else.  The delimter in the client and the server have to be the same
 	tcpClient.setVerbose(true);
+    tcpClient.setup("127.0.0.1", 80);
+	// optionally set the delimiter to something else.  The delimter in the client and the server have to be the same
 	tcpClient.setMessageDelimiter("\n");
 }
 
@@ -73,9 +73,8 @@ void testApp::update(){
 //--------------------------------------------------------------
 void testApp::draw(){
     /**
-     定期的に実行する
+     * 定期的に実行する
      */
-
 	ofSetColor(225);
     string ip = tcpClient.getIP();
 	ofDrawBitmapString("AUDIO INPUT EXAMPLE", 32, 32);
@@ -149,7 +148,7 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
 	for (int i = 0; i < bufferSize; i++){
 		inputTemp[i]		= input[i] * 0.5;
 		curVol += inputTemp[i] * inputTemp[i];
-		numCounted+=1;
+		numCounted += 1;
 	}
 
 	// this is how we get the mean of rms
@@ -170,6 +169,7 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
         else if(raw < 0)raw = 0;
         recBuffer[recBufferCounter++] = (unsigned short) raw;
 //      cout << input[i] << endl;
+        recBufferCounter++;
 
     }
 //    cout << "Rec buffer input" << recBufferCounter << " / " << recBufferSize << endl;
@@ -229,9 +229,11 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
 void testApp::sendData(){
 //    cout << "Rec buffer dump:" << recBufferSize << endl;
 //
-//    for (int i = 0; i < recBufferSize; i++){
+    for (int i = 0; i < recBufferSize; i++){
+        // 矩形波
+        recBuffer[i] = i % 4 > 1 ? 192 : 64;
 //        cout << (int)recBuffer[i] << endl;
-//    }
+    }
 
     serial.writeBytes(recBuffer, recBufferSize);
 
@@ -245,7 +247,6 @@ void testApp::audioOut(float * output, int bufferSize, int nChannels){
     assert(playBufferCounter >= 0);
 
 //    cout << "Audio out (bufsize: " << bufferSize << ", playBufferCounter" << playBufferCounter << endl;
-
 //    if(playBufferCounter < bufferSize) return;
 
     // up sampling from 8000hz -> 48000hz

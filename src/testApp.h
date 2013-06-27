@@ -52,4 +52,5 @@ public:
     ofSoundStream soundStream;
     ofxUDPManager udpConnection;
     ofxTCPClient tcpClient;
+    ofxTCPClient tcpServer;
 };
