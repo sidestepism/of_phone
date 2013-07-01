@@ -35,8 +35,6 @@ public:
     int 	bufferCounter;
     int 	drawCounter;
 
-    bool weConnected;
-
     float smoothedVol;
     float scaledVol;
 
@@ -55,8 +53,17 @@ public:
     bool speaking;
     bool ready;
 
-    float deltaTime;
+    int connectTime;
+    int deltaTime;
 
     ofSoundStream soundStream;
-    ofxUDPManager udpConnection;
+    ofxTCPServer TCPServer;
+    ofxTCPClient tcpClient;
+    bool weConnected;
+
+    char* ipaddr;
+    int port;
+
+    void sendOnTCP(char* data);
+    int recvOnTCP(char* receiveBytes, int numBytes);
 };

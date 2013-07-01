@@ -2,9 +2,7 @@
 #include "ofxNetwork.h"
 #include <string.h>
 
-
 #include "ofUtils.h"
-
 
 //-------------------------------------------------------------
 void testApp::setup(){
@@ -36,7 +34,7 @@ void testApp::setup(){
 
     // setup buffer
     recBufferCounter = 0;
-    recBufferSize = 128;
+    recBufferSize = 1024;
     playBufferCounter = 0;
     playBufferSize = 1024;
 
@@ -47,21 +45,14 @@ void testApp::setup(){
 
 	soundStream.setup(this, 2, 1, 48000, bufferSize, 4);
 
-    const char* ipaddr = ofSystemTextBoxDialog("Destination IP Addr", "10.100.0.225").c_str();
+    // ipaddr = ofSystemTextBoxDialog("Destination IP Addr", "10.100.0.225").c_str();
     ipaddr = "10.100.0.225";
-
-    int port;
     istringstream(ofSystemTextBoxDialog("Destination Port", "9750")) >> port;
-
-    cout << "ipaddr " << ipaddr << "port: " << port << endl;
+    cout << "ipaddr " << ipaddr << ", port: " << port << endl;
 
     speaking = false;
+    weConnected = false;
 
-    // udp setup
-    udpConnection.Create();
-	udpConnection.Connect(ipaddr, port);
-	udpConnection.SetNonBlocking(true);
-	udpConnection.Bind(9750);
 }
 
 
@@ -77,7 +68,6 @@ void testApp::update(){
 	if( volHistory.size() >= 400 ){
 		volHistory.erase(volHistory.begin(), volHistory.begin()+1);
 	}
-
 }
 
 //--------------------------------------------------------------
@@ -112,14 +102,13 @@ void testApp::draw(){
     ofSetLineWidth(3);
 
     ofBeginShape();
-    for (int i = 0; i < recBufferSize; i++){
+    for (int i = 0; i < 128; i++){
         ofVertex(i*4, 100-inputTemp[i]*180.0f);
     }
     ofEndShape(false);
 
     ofPopMatrix();
 	ofPopStyle();
-
 
 	// draw the left channel:
 	ofPushStyle();
@@ -137,7 +126,7 @@ void testApp::draw(){
 
     ofBeginShape();
     for (int i = 0; i < recBufferSize; i++){
-        ofVertex(i*4, 100-playBuffer[i]*180.0f);
+        ofVertex(i*0.5, 100-playBuffer[i]*180.0f);
     }
     ofEndShape(false);
 
@@ -161,9 +150,7 @@ void testApp::draw(){
     ofBeginShape();
     for (int i = 0; i < volHistory.size(); i++){
         if( i == 0 ) ofVertex(i, 400);
-
         ofVertex(i, 400 - volHistory[i] * 70);
-
         if( i == volHistory.size() -1 ) ofVertex(i, 400);
     }
     ofEndShape(false);
@@ -200,7 +187,6 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
     for (int i = 0; i < bufferSize; i+= 5){
         if(recBufferCounter >= recBufferSize){
             this->sendData();
-//            cout << "Rec buffer is full" << endl;
             break;
         }
         int raw = (128 + (128 * inputTemp[i]) * 2);
@@ -219,73 +205,96 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
     /**
      reading from serial
      */
-
-    unsigned char readBuffer[1024];
-    memset(readBuffer, 0, 1024);
-
-    int bytes = OF_SERIAL_NO_DATA;
-
     if(ready){
-        char udpMessage[playBufferSize];
-        bytes = udpConnection.Receive(udpMessage, playBufferSize);
-        if(bytes > 0){
-            speaking = true;
+        char readBuffer[recBufferSize];
+        int bytes = recvOnTCP((char *)readBuffer, recBufferSize);
+
+        if(bytes > 1024){
+        }else if(bytes == 0){
+            return;
         }
-    }
+        cout << "received, " << bytes << endl;
+        cout << "content: " << readBuffer << endl;
 
-    //    int bytes = serial.readBytes(readBuffer, playBufferSize);
 
-//   cout << "readBuffer: " << endl;
-//   cout << readBuffer << endl;
+        // cout << endl;
 
-//    for(int i = 0; i < bytes; i++){
-//        cout << (unsigned short)readBuffer[i] << " ";
-//    }
-
-    // cout << endl;
-
-    if ( bytes == OF_SERIAL_ERROR )
-    {
-//\        cout << "unrecoverable error reading from serial" << endl;
-        return 0;
-        // bail out
-    }
-    else if ( bytes == OF_SERIAL_NO_DATA )
-    {
-        // cout << "no data" << endl;
-        // nothing was read, try again
-    }
-    else
-    {
-//        cout << "data received: " << bytes << " bytes" << endl;
-//
-//        cout << endl;
-
-        if(playBufferCounter < playBufferSize){
-            memcpy(&playBuffer[playBufferCounter], readBuffer, playBufferSize - playBufferCounter);
-            playBufferCounter += bytes;
-            if(playBufferCounter >= playBufferSize){
-                playBufferCounter = playBufferSize;
-//                cout << "Play buffer is full" << endl;
+        if ( bytes == OF_SERIAL_ERROR )
+        {
+            return 0;
+            // bail out
+        }
+        else if ( bytes == OF_SERIAL_NO_DATA )
+        {
+            // cout << "no data" << endl;
+            // nothing was read, try again
+        }
+        else
+        {
+            if(playBufferCounter < playBufferSize){
+                memcpy(&playBuffer[playBufferCounter], readBuffer, playBufferSize - playBufferCounter);
+                playBufferCounter += bytes;
+                if(playBufferCounter >= playBufferSize){
+                    playBufferCounter = playBufferSize;
+                                    cout << "Play buffer is full" << endl;
+                }
             }
-            // we read some data!
         }
     }
-
 }
 
+void testApp::sendOnTCP(char* data){
+    string str = data;
+//    cout << "data sending (" << str.length() << ")" << str << endl;
+
+    if(tcpClient.send(str)){
+        //if data has been sent lets update our text
+        
+    }else{
+		//if we are not connected lets try and reconnect every 5 seconds
+		deltaTime = ofGetElapsedTimeMillis() - connectTime;
+
+		if( deltaTime > 5000 ){
+			weConnected = tcpClient.setup("127.0.0.1", 11999);
+			connectTime = ofGetElapsedTimeMillis();
+		}
+
+	}
+}
+
+int testApp::recvOnTCP(char* receiveBytes, int numBytes){
+    if(weConnected){
+        int bytes = tcpClient.receiveRawBytes(receiveBytes, numBytes);
+        if( bytes > 0 ){
+            cout << "data received (" << bytes << ") " << receiveBytes << endl;
+            return bytes;
+        }else if(!tcpClient.isConnected()){
+            cout << "connection lost" << endl;
+			weConnected = false;
+		}
+	}else{
+		//if we are not connected lets try and reconnect every 5 seconds
+		deltaTime = ofGetElapsedTimeMillis() - connectTime;
+        cout << "try to reconnect" << endl;
+
+		if( deltaTime > 1000 ){
+			weConnected = tcpClient.setup("127.0.0.1", 11999);
+			connectTime = ofGetElapsedTimeMillis();
+		}
+	}
+    return 0;
+}
 
 void testApp::sendData(){
 //    cout << "Rec buffer dump:" << recBufferSize << endl;
 //
     for (int i = 0; i < recBufferSize; i++){
-        // 矩形波
 //          recBuffer[i] = i % 2 ? 128 - 8 : 128 + 8;
 //          cout << (int)recBuffer[i] << endl;
     }
 
     if(speaking){
-        udpConnection.SendAll((const char *)recBuffer, recBufferSize);
+        sendOnTCP((char *)recBuffer);
     }
 
 //    serial.writeBytes(recBuffer, recBufferSize);
@@ -295,12 +304,14 @@ void testApp::sendData(){
     memset(recBuffer, 0, recBufferSize);
 }
 
+
+
 //--------------------------------------------------------------
 void testApp::audioOut(float * output, int bufferSize, int nChannels){
     assert(playBufferCounter >= 0);
-
-//    cout << "Audio out (bufsize: " << bufferSize << ", playBufferCounter" << playBufferCounter << endl;
-//    if(playBufferCounter < bufferSize) return;
+    if(playBufferCounter > 0){
+        cout << "Audio out (bufsize: " << bufferSize << ", playBufferCounter" << playBufferCounter << endl;
+    }
 
     // up sampling from 8000hz -> 48000hz
     int frame = 0;
@@ -309,9 +320,9 @@ void testApp::audioOut(float * output, int bufferSize, int nChannels){
 
         float sample = (((float)(playBuffer[frame]) - 128) / 256) * 0.5;
 
-//        if(playBuffer[frame] == 0){
-//            sample = 0;
-//        }
+        if(playBuffer[frame] == 0){
+            sample = 0;
+        }
 //        cout << (unsigned short)playBuffer[frame] << ": " << sample << endl;
 
         output[i*2    ] = sample;
@@ -350,6 +361,7 @@ void testApp::audioOut(float * output, int bufferSize, int nChannels){
 //    }
 //
 //    cout << endl;
+
 }
 
 
@@ -363,18 +375,28 @@ void testApp::keyPressed(int key){
 		soundStream.start();
 	}
 
+    if( key == 'a' ){
+        weConnected = tcpClient.setup(ipaddr, port);
+        //optionally set the delimiter to something else.  The delimter in the client and the server have to be the same
+        tcpClient.setMessageDelimiter("\n");
+        cout << "setup" << endl;
+        ready = true;
+    }
+
 	if( key == 'c' ){
+		soundStream.start();
         char callMsg[36] = "00000000calHello world!------------";
-        udpConnection.SendAll(callMsg, 35);
+        sendOnTCP(callMsg);
         speaking = true;
 	}
     if( key == '1' ){
         char callMsg[36] = "00000000smsHello world!------------";
-        udpConnection.SendAll(callMsg, 35);
+        sendOnTCP(callMsg);
 	}
 	if( key == 'h' ){
         char callMsg[36] = "00000000endHello world!------------";
-        udpConnection.SendAll(callMsg, 11);
+        sendOnTCP(callMsg);
+        speaking = false;
 		soundStream.stop();
 	}
 
