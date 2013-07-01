@@ -46,10 +46,11 @@ void testApp::setup(){
 
 //    ipaddr = "10.100.0.225";
 //    port = 9750;
-        ipaddr = "157.82.7.141";
-        port = 9750;
+    ipaddr = "157.82.7.141";
+    port = 9750;
 
-    //    ipaddr = (char *)ofSystemTextBoxDialog("Destination IP Addr", "10.100.0.225").c_str();
+
+//    ipaddr = (char *)ofSystemTextBoxDialog("Destination IP Addr", "10.100.0.225").c_str();
 //    istringstream(ofSystemTextBoxDialog("Destination Port", "9750")) >> port;
     cout << "ipaddr " << ipaddr << ", port: " << port << endl;
 
@@ -252,52 +253,33 @@ void testApp::sendOnTCP(char* data, int size, bool testWave){
 //            str[i] = i % 2 == 0 ? 128 + 8 : 128 - 8;
 //        }
 //    }
-
 //    cout << "data sending " << data << endl;
 //    for(int i = 0; i < size; i++){
 //        cout << i << ": " << (char)data[i] << endl;
 //    }
 
     if(speaking){
-        if(tcpClient.sendRawBytes(data, size)){
-            //if data has been sent lets update our text
-        }else{
-            //if we are not connected lets try and reconnect every 5 seconds
-            deltaTime = ofGetElapsedTimeMillis() - connectTime;
+        if(udpConnection.Send(data, size)){
 
-            if( deltaTime > 5000 ){
-                weConnected = tcpClient.setup("127.0.0.1", 11999);
-                connectTime = ofGetElapsedTimeMillis();
-            }
-            
+        }else{
+            cout << "sending failed" << endl;
         }
     }
 }
 
 int testApp::recvOnTCP(char* receiveBytes, int numBytes){
-    if(weConnected){
-        int bytes = tcpClient.receiveRawBytes(receiveBytes, numBytes);
-        if( bytes > 0 ){
+    int bytes = udpReceiver.Receive(receiveBytes, numBytes);
+    if( bytes > 0 ){
 //            cout << "data received (" << bytes << ") " << receiveBytes << endl;
 //            for(int i = 0; i < bytes; i++){
 //                cout << i << ": " << (unsigned short)receiveBytes[i] << endl;
 //            }
             return bytes;
-        }else if(!tcpClient.isConnected()){
-//            cout << "connection lost" << endl;
+        }else{
+            cout << "connection lost" << endl;
 			weConnected = false;
+            return 0;
 		}
-	}else{
-		//if we are not connected lets try and reconnect every 5 seconds
-		deltaTime = ofGetElapsedTimeMillis() - connectTime;
-//        cout << "try to reconnect" << endl;
-
-		if( deltaTime > 1000 ){
-			weConnected = tcpClient.setup("127.0.0.1", 11999);
-			connectTime = ofGetElapsedTimeMillis();
-		}
-	}
-    return 0;
 }
 
 void testApp::sendData(){
@@ -391,9 +373,14 @@ void testApp::keyPressed(int key){
 	}
 
     if( key == 'a' ){
-        weConnected = tcpClient.setup(ipaddr, port);
-        //optionally set the delimiter to something else.  The delimter in the client and the server have to be the same
-        tcpClient.setMessageDelimiter("\n");
+        udpConnection.Create();
+        udpConnection.Connect(ipaddr, port);
+        udpConnection.SetNonBlocking(true);
+
+        //create the socket and bind to port 11999
+        udpReceiver.Create();
+        udpReceiver.Bind(port);
+        
         cout << "setup" << endl;
         ready = true;
     }

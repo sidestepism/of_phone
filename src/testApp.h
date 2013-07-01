@@ -59,6 +59,10 @@ public:
     ofSoundStream soundStream;
     ofxTCPServer TCPServer;
     ofxTCPClient tcpClient;
+    ofxUDPManager udpConnection;
+    ofxUDPManager udpReceiver;
+
+
     bool weConnected;
 
     char* ipaddr;
