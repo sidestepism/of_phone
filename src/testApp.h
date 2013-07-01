@@ -30,9 +30,12 @@ public:
     void audioOut(float * output, int bufferSize, int nChannels);
 
     vector <float> volHistory;
+    string msgTx, msgRx;
 
     int 	bufferCounter;
     int 	drawCounter;
+
+    bool weConnected;
 
     float smoothedVol;
     float scaledVol;
@@ -49,8 +52,8 @@ public:
     unsigned char playBuffer[1024];
     unsigned char playTemp[1024];
 
+    float deltaTime;
+
     ofSoundStream soundStream;
     ofxUDPManager udpConnection;
-    ofxTCPClient tcpClient;
-    ofxTCPClient tcpServer;
 };

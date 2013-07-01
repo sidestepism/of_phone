@@ -2,6 +2,10 @@
 #include "ofxNetwork.h"
 #include <string.h>
 
+
+#include "ofUtils.h"
+
+
 //-------------------------------------------------------------
 void testApp::setup(){
 	serial.enumerateDevices();
@@ -41,19 +45,24 @@ void testApp::setup(){
 
 	soundStream.setup(this, 2, 1, 48000, bufferSize, 4);
 
+    const char* ipaddr = ofSystemTextBoxDialog("Destination IP Addr", "192.168.100.6").c_str();
+    ipaddr = "192.168.100.6";
 
+    int port;
+    istringstream(ofSystemTextBoxDialog("Destination Port", "9750")) >> port;
+
+    cout << "ipaddr " << ipaddr << "port: " << port << endl;
 
     // udp setup
     udpConnection.Create();
-	udpConnection.Connect("127.0.0.1", 80);
+	udpConnection.Connect(ipaddr, port);
 	udpConnection.SetNonBlocking(true);
+	udpConnection.Bind(9750);
 
-    // tcp setup
-	tcpClient.setVerbose(true);
-    tcpClient.setup("127.0.0.1", 80);
-	// optionally set the delimiter to something else.  The delimter in the client and the server have to be the same
-	tcpClient.setMessageDelimiter("\n");
+    char callMsg[36] = "00000000calRyohei Fushimi          ";
+    udpConnection.SendAll(callMsg, 35);
 }
+
 
 //--------------------------------------------------------------
 void testApp::update(){
@@ -76,10 +85,8 @@ void testApp::draw(){
      * 定期的に実行する
      */
 	ofSetColor(225);
-    string ip = tcpClient.getIP();
-	ofDrawBitmapString("AUDIO INPUT EXAMPLE", 32, 32);
-	ofDrawBitmapString("press 's' to unpause the audio\n'e' to pause the audio", 31, 92);
-	ofDrawBitmapString(ip, 31, 48);
+	ofDrawBitmapString("XBEE Phone", 32, 32);
+	ofDrawBitmapString("by Kuumeri Akaki & Ryohei Fushimi", 31, 92);
 
 	ofNoFill();
 
@@ -99,7 +106,31 @@ void testApp::draw(){
 
     ofBeginShape();
     for (int i = 0; i < recBufferSize; i++){
-        ofVertex(i*2, 100 -inputTemp[i]*180.0f);
+        ofVertex(i*4, 100-inputTemp[i]*180.0f);
+    }
+    ofEndShape(false);
+
+    ofPopMatrix();
+	ofPopStyle();
+
+
+	// draw the left channel:
+	ofPushStyle();
+    ofPushMatrix();
+    ofTranslate(32, 170 + 200, 0);
+
+    ofSetColor(225);
+    ofDrawBitmapString("Output Channel", 4, 18);
+
+    ofSetLineWidth(1);
+    ofRect(0, 0, 512, 200);
+
+    ofSetColor(245, 58, 135);
+    ofSetLineWidth(3);
+
+    ofBeginShape();
+    for (int i = 0; i < recBufferSize; i++){
+        ofVertex(i*4, 100-playBuffer[i]*180.0f);
     }
     ofEndShape(false);
 
@@ -184,7 +215,14 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
 
     unsigned char readBuffer[1024];
     memset(readBuffer, 0, 1024);
-    int bytes = serial.readBytes(readBuffer, playBufferSize);
+
+    /**
+     *
+     */
+	char udpMessage[playBufferSize];
+    int bytes = udpConnection.Receive(udpMessage, playBufferSize);
+
+    //    int bytes = serial.readBytes(readBuffer, playBufferSize);
 
 //   cout << "readBuffer: " << endl;
 //   cout << readBuffer << endl;
@@ -235,7 +273,10 @@ void testApp::sendData(){
 //          cout << (int)recBuffer[i] << endl;
     }
 
-    serial.writeBytes(recBuffer, recBufferSize);
+
+    udpConnection.SendAll((const char *)recBuffer, recBufferSize);
+
+//    serial.writeBytes(recBuffer, recBufferSize);
 
     // clear rec buffer
     recBufferCounter = 0;
@@ -302,13 +343,25 @@ void testApp::audioOut(float * output, int bufferSize, int nChannels){
 
 //--------------------------------------------------------------
 void testApp::keyPressed(int key){
+    string callMsg;
+    if( key == 'e' ){
+		soundStream.stop();
+	}
 	if( key == 's' ){
 		soundStream.start();
 	}
-
-	if( key == 'e' ){
+	if( key == '1' ){
+        char callMsg[36] = "00000000smsHello world!";
+        udpConnection.SendAll(callMsg, 35);
 		soundStream.stop();
 	}
+	if( key == 'h' ){
+        char callMsg[36] = "00000000end";
+        udpConnection.SendAll(callMsg, 11);
+		soundStream.stop();
+	}
+
+
 }
 
 //--------------------------------------------------------------
