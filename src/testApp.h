@@ -52,6 +52,9 @@ public:
     unsigned char playBuffer[1024];
     unsigned char playTemp[1024];
 
+    bool speaking;
+    bool ready;
+
     float deltaTime;
 
     ofSoundStream soundStream;

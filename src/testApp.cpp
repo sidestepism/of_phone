@@ -43,24 +43,25 @@ void testApp::setup(){
     memset(recBuffer, 0, 1024);
     memset(playBuffer, 0, 1024);
 
+    ready = false;
+
 	soundStream.setup(this, 2, 1, 48000, bufferSize, 4);
 
-    const char* ipaddr = ofSystemTextBoxDialog("Destination IP Addr", "192.168.100.6").c_str();
-    ipaddr = "192.168.100.6";
+    const char* ipaddr = ofSystemTextBoxDialog("Destination IP Addr", "10.100.0.225").c_str();
+    ipaddr = "10.100.0.225";
 
     int port;
     istringstream(ofSystemTextBoxDialog("Destination Port", "9750")) >> port;
 
     cout << "ipaddr " << ipaddr << "port: " << port << endl;
 
+    speaking = false;
+
     // udp setup
     udpConnection.Create();
 	udpConnection.Connect(ipaddr, port);
 	udpConnection.SetNonBlocking(true);
 	udpConnection.Bind(9750);
-
-    char callMsg[36] = "00000000calRyohei Fushimi          ";
-    udpConnection.SendAll(callMsg, 35);
 }
 
 
@@ -87,6 +88,12 @@ void testApp::draw(){
 	ofSetColor(225);
 	ofDrawBitmapString("XBEE Phone", 32, 32);
 	ofDrawBitmapString("by Kuumeri Akaki & Ryohei Fushimi", 31, 92);
+    if(speaking){
+        ofDrawBitmapString("connected.", 31, 72);
+    }else{
+        ofDrawBitmapString("waiting clients..", 31, 72);
+
+    }
 
 	ofNoFill();
 
@@ -216,11 +223,15 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
     unsigned char readBuffer[1024];
     memset(readBuffer, 0, 1024);
 
-    /**
-     *
-     */
-	char udpMessage[playBufferSize];
-    int bytes = udpConnection.Receive(udpMessage, playBufferSize);
+    int bytes = OF_SERIAL_NO_DATA;
+
+    if(ready){
+        char udpMessage[playBufferSize];
+        bytes = udpConnection.Receive(udpMessage, playBufferSize);
+        if(bytes > 0){
+            speaking = true;
+        }
+    }
 
     //    int bytes = serial.readBytes(readBuffer, playBufferSize);
 
@@ -273,8 +284,9 @@ void testApp::sendData(){
 //          cout << (int)recBuffer[i] << endl;
     }
 
-
-    udpConnection.SendAll((const char *)recBuffer, recBufferSize);
+    if(speaking){
+        udpConnection.SendAll((const char *)recBuffer, recBufferSize);
+    }
 
 //    serial.writeBytes(recBuffer, recBufferSize);
 
@@ -350,13 +362,18 @@ void testApp::keyPressed(int key){
 	if( key == 's' ){
 		soundStream.start();
 	}
-	if( key == '1' ){
-        char callMsg[36] = "00000000smsHello world!";
+
+	if( key == 'c' ){
+        char callMsg[36] = "00000000calHello world!------------";
         udpConnection.SendAll(callMsg, 35);
-		soundStream.stop();
+        speaking = true;
+	}
+    if( key == '1' ){
+        char callMsg[36] = "00000000smsHello world!------------";
+        udpConnection.SendAll(callMsg, 35);
 	}
 	if( key == 'h' ){
-        char callMsg[36] = "00000000end";
+        char callMsg[36] = "00000000endHello world!------------";
         udpConnection.SendAll(callMsg, 11);
 		soundStream.stop();
 	}
