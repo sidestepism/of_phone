@@ -105,7 +105,7 @@ void testApp::draw(){
 
     ofBeginShape();
     for (int i = 0; i < 128; i++){
-        ofVertex(i*4, 100-inputTemp[i]*180.0f);
+        ofVertex(i*4, 100-inputTemp[i]*100.0f);
     }
     ofEndShape(false);
 
@@ -190,7 +190,9 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
     // down sampling from 48000hz -> 9600hz (5)
     for (int i = 0; i < bufferSize; i+= 5){
         if(recBufferCounter >= recBufferSize){
-            this->sendData();
+            if (speaking) {
+                this->sendData();
+            }
             break;
         }
         int raw = (128 + 128 * 4 * inputTemp[i]);
@@ -208,39 +210,24 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
     /**
      reading from serial
      */
+
     if(ready){
         char readBuffer[playBufferSize];
         int bytes = recvOnTCP((char *)readBuffer, playBufferSize);
 
         if(bytes > 16384){
+
         }else if(bytes == 0){
-            return;
+
+
         }
 //        cout << "received, " << bytes << endl;
-//        cout << "content: " << readBuffer << endl;
-
-
-        // cout << endl;
-
-        if ( bytes == OF_SERIAL_ERROR )
-        {
-            return 0;
-            // bail out
-        }
-        else if ( bytes == OF_SERIAL_NO_DATA )
-        {
-            // cout << "no data" << endl;
-            // nothing was read, try again
-        }
-        else
-        {
-            if(playBufferCounter < playBufferSize){
-                memcpy(&playBuffer[playBufferCounter], readBuffer, playBufferSize - playBufferCounter);
-                playBufferCounter += bytes;
-                if(playBufferCounter >= playBufferSize){
-                    playBufferCounter = playBufferSize;
-                                    cout << "Play buffer is full" << endl;
-                }
+        if(playBufferCounter < playBufferSize){
+            memcpy(&playBuffer[playBufferCounter], readBuffer, playBufferSize - playBufferCounter);
+            playBufferCounter += bytes;
+            if(playBufferCounter >= playBufferSize){
+                playBufferCounter = playBufferSize;
+                                cout << "Play buffer is full" << endl;
             }
         }
     }
@@ -248,49 +235,42 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
 
 void testApp::sendOnTCP(char* data, int size, bool testWave){
 
-//    if(testWave){
-//        for(int i = 0; i < str.length(); i++){
-//            str[i] = i % 2 == 0 ? 128 + 8 : 128 - 8;
-//        }
-//    }
 //    cout << "data sending " << data << endl;
 //    for(int i = 0; i < size; i++){
 //        cout << i << ": " << (char)data[i] << endl;
 //    }
 
-    if(speaking){
         if(udpConnection.Send(data, size)){
 
         }else{
             cout << "sending failed" << endl;
         }
-    }
 }
 
 int testApp::recvOnTCP(char* receiveBytes, int numBytes){
     int bytes = udpReceiver.Receive(receiveBytes, numBytes);
     if( bytes > 0 ){
-//            cout << "data received (" << bytes << ") " << receiveBytes << endl;
+//        cout << "data received (" << bytes << ") " << receiveBytes << endl;
 //            for(int i = 0; i < bytes; i++){
 //                cout << i << ": " << (unsigned short)receiveBytes[i] << endl;
 //            }
             return bytes;
         }else{
-            cout << "connection lost" << endl;
+//            cout << "got 0 bytes" << endl;
 			weConnected = false;
             return 0;
 		}
 }
 
 void testApp::sendData(){
-    cout << "Rec buffer dump:" << recBufferSize << endl;
+//    cout << "Rec buffer dump:" << recBufferSize << endl;
 //
-    for (int i = 0; i < recBufferSize; i++){
+//    for (int i = 0; i < recBufferSize; i++){
 //          recBuffer[i] = i % 2 ? 128 - 8 : 128 + 8;
 //          cout << (int)recBuffer[i] << endl;
-    }
+//    }
 
-//    if(speaking){se
+//    if(speaking){
         sendOnTCP((char *)recBuffer, recBufferCounter, true);
 //    }
 
@@ -305,17 +285,25 @@ void testApp::sendData(){
 void testApp::audioOut(float * output, int bufferSize, int nChannels){
     assert(playBufferCounter >= 0);
 
+    float frameRate = 6;
     if(playBufferCounter < 128){
         return;
+    }else if(playBufferCounter < 256){
+        frameRate = 5.8;
+    }else if(playBufferCounter < 512){
+        frameRate = 6.4;
+    }else if(playBufferCounter < 2048){
+        frameRate = 6;
+    }else{
+        frameRate = 5.5;
     }
 
     // up sampling from 8000hz -> 48000hz
     int frame = 0;
     for (int i = 0; i < bufferSize; i++){
-        frame = floor(i / 7);
+        frame = floor(i / frameRate);
 
         float sample = (((float)(playBuffer[frame]) - 128) / 256) * 0.5;
-//        cout << (unsigned short)playBuffer[frame] << ": " << sample << endl;
         if(playBuffer[frame] == 0){
             sample = 0;
         }
@@ -380,7 +368,8 @@ void testApp::keyPressed(int key){
         //create the socket and bind to port 11999
         udpReceiver.Create();
         udpReceiver.Bind(port);
-        
+        udpReceiver.SetNonBlocking(true);
+
         cout << "setup" << endl;
         ready = true;
     }
@@ -389,6 +378,7 @@ void testApp::keyPressed(int key){
         char callMsg[36] = "00000000calHello world!-----------\n";
         sendOnTCP(callMsg, 36, false);
 		soundStream.start();
+        speaking = true;
 	}
     if( key == '1' ){
         char callMsg[36] = "00000000smsHello world!-----------\n";
