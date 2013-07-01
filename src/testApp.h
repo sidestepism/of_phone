@@ -40,15 +40,15 @@ public:
 
     int recBufferCounter;
     int recBufferSize;
-    unsigned char recBuffer[1024];
     float inputTemp[1024];
+    unsigned char recBuffer[1024];
     unsigned char recTemp[1024];
 
 
     int playBufferCounter;
     int playBufferSize;
-    unsigned char playBuffer[1024];
-    unsigned char playTemp[1024];
+    unsigned char playBuffer[16384];
+    unsigned char playTemp[16384];
 
     bool speaking;
     bool ready;
@@ -64,6 +64,6 @@ public:
     char* ipaddr;
     int port;
 
-    void sendOnTCP(char* data);
+    void sendOnTCP(char* data, int size, bool testWave);
     int recvOnTCP(char* receiveBytes, int numBytes);
 };

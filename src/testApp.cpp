@@ -24,7 +24,6 @@ void testApp::setup(){
 	//if you want to set a different device id
 	//soundStream.setDeviceID(0); //bear in mind the device id corresponds to all audio devices, including  input-only and output-only devices.
 
-	int bufferSize = 128;
 	volHistory.assign(400, 0.0);
 
 	bufferCounter	= 0;
@@ -36,23 +35,26 @@ void testApp::setup(){
     recBufferCounter = 0;
     recBufferSize = 1024;
     playBufferCounter = 0;
-    playBufferSize = 1024;
+    playBufferSize = 16384;
 
     memset(recBuffer, 0, 1024);
-    memset(playBuffer, 0, 1024);
+    memset(playBuffer, 0, 16384);
 
     ready = false;
 
-	soundStream.setup(this, 2, 1, 48000, bufferSize, 4);
+	soundStream.setup(this, 2, 1, 48000, 128, 4);
 
-    // ipaddr = ofSystemTextBoxDialog("Destination IP Addr", "10.100.0.225").c_str();
-    ipaddr = "10.100.0.225";
-    istringstream(ofSystemTextBoxDialog("Destination Port", "9750")) >> port;
+//    ipaddr = "10.100.0.225";
+//    port = 9750;
+        ipaddr = "157.82.7.141";
+        port = 9750;
+
+    //    ipaddr = (char *)ofSystemTextBoxDialog("Destination IP Addr", "10.100.0.225").c_str();
+//    istringstream(ofSystemTextBoxDialog("Destination Port", "9750")) >> port;
     cout << "ipaddr " << ipaddr << ", port: " << port << endl;
 
     speaking = false;
     weConnected = false;
-
 }
 
 
@@ -82,7 +84,6 @@ void testApp::draw(){
         ofDrawBitmapString("connected.", 31, 72);
     }else{
         ofDrawBitmapString("waiting clients..", 31, 72);
-
     }
 
 	ofNoFill();
@@ -125,8 +126,8 @@ void testApp::draw(){
     ofSetLineWidth(3);
 
     ofBeginShape();
-    for (int i = 0; i < recBufferSize; i++){
-        ofVertex(i*0.5, 100-playBuffer[i]*180.0f);
+    for (int i = 0; i < playBufferSize; i++){
+        ofVertex(i * 4, 100-(((float)(playBuffer[i]) - 128) / 256)*180.0f);
     }
     ofEndShape(false);
 
@@ -163,6 +164,8 @@ void testApp::draw(){
 	ofSetColor(225);
 	string reportString = "buffers received: "+ofToString(bufferCounter)+"\ndraw routines called: "+ofToString(drawCounter)+"\nticks: " + ofToString(soundStream.getTickCount());
 	ofDrawBitmapString(reportString, 32, 589);
+    ofDrawBitmapString("rec buffer: " + ofToString(recBufferCounter) + " / " + ofToString(recBufferSize) , 32, 589 + 16 + 32);
+    ofDrawBitmapString("play buffer: " + ofToString(playBufferCounter) + " / " + ofToString(playBufferSize) , 32, 589 + 32 + 32);
 }
 
 //--------------------------------------------------------------
@@ -183,21 +186,20 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
 	curVol = sqrt( curVol );
 
     // down sampling from 48000hz -> 8000hz
-    // down sampling from 48000hz -> 9600hz
+    // down sampling from 48000hz -> 9600hz (5)
     for (int i = 0; i < bufferSize; i+= 5){
         if(recBufferCounter >= recBufferSize){
             this->sendData();
             break;
         }
-        int raw = (128 + (128 * inputTemp[i]) * 2);
+        int raw = (128 + 128 * 4 * inputTemp[i]);
         if(raw > 255)raw = 255;
         else if(raw < 0)raw = 0;
-        recBuffer[recBufferCounter++] = (unsigned short) raw;
+//        cout << "raw: " << raw << ", input: " << inputTemp[i] << endl;
+        recBuffer[recBufferCounter++] = (unsigned int)raw;
         
 //      cout << input[i] << endl;
     }
-//    cout << "Rec buffer input" << recBufferCounter << " / " << recBufferSize << endl;
-
 	smoothedVol *= 0.93;
 	smoothedVol += 0.07 * curVol;
 	bufferCounter++;
@@ -206,15 +208,15 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
      reading from serial
      */
     if(ready){
-        char readBuffer[recBufferSize];
-        int bytes = recvOnTCP((char *)readBuffer, recBufferSize);
+        char readBuffer[playBufferSize];
+        int bytes = recvOnTCP((char *)readBuffer, playBufferSize);
 
-        if(bytes > 1024){
+        if(bytes > 16384){
         }else if(bytes == 0){
             return;
         }
-        cout << "received, " << bytes << endl;
-        cout << "content: " << readBuffer << endl;
+//        cout << "received, " << bytes << endl;
+//        cout << "content: " << readBuffer << endl;
 
 
         // cout << endl;
@@ -243,39 +245,52 @@ void testApp::audioIn(float * input, int bufferSize, int nChannels){
     }
 }
 
-void testApp::sendOnTCP(char* data){
-    string str = data;
-//    cout << "data sending (" << str.length() << ")" << str << endl;
+void testApp::sendOnTCP(char* data, int size, bool testWave){
 
-    if(tcpClient.send(str)){
-        //if data has been sent lets update our text
-        
-    }else{
-		//if we are not connected lets try and reconnect every 5 seconds
-		deltaTime = ofGetElapsedTimeMillis() - connectTime;
+//    if(testWave){
+//        for(int i = 0; i < str.length(); i++){
+//            str[i] = i % 2 == 0 ? 128 + 8 : 128 - 8;
+//        }
+//    }
 
-		if( deltaTime > 5000 ){
-			weConnected = tcpClient.setup("127.0.0.1", 11999);
-			connectTime = ofGetElapsedTimeMillis();
-		}
+//    cout << "data sending " << data << endl;
+//    for(int i = 0; i < size; i++){
+//        cout << i << ": " << (char)data[i] << endl;
+//    }
 
-	}
+    if(speaking){
+        if(tcpClient.sendRawBytes(data, size)){
+            //if data has been sent lets update our text
+        }else{
+            //if we are not connected lets try and reconnect every 5 seconds
+            deltaTime = ofGetElapsedTimeMillis() - connectTime;
+
+            if( deltaTime > 5000 ){
+                weConnected = tcpClient.setup("127.0.0.1", 11999);
+                connectTime = ofGetElapsedTimeMillis();
+            }
+            
+        }
+    }
 }
 
 int testApp::recvOnTCP(char* receiveBytes, int numBytes){
     if(weConnected){
         int bytes = tcpClient.receiveRawBytes(receiveBytes, numBytes);
         if( bytes > 0 ){
-            cout << "data received (" << bytes << ") " << receiveBytes << endl;
+//            cout << "data received (" << bytes << ") " << receiveBytes << endl;
+//            for(int i = 0; i < bytes; i++){
+//                cout << i << ": " << (unsigned short)receiveBytes[i] << endl;
+//            }
             return bytes;
         }else if(!tcpClient.isConnected()){
-            cout << "connection lost" << endl;
+//            cout << "connection lost" << endl;
 			weConnected = false;
 		}
 	}else{
 		//if we are not connected lets try and reconnect every 5 seconds
 		deltaTime = ofGetElapsedTimeMillis() - connectTime;
-        cout << "try to reconnect" << endl;
+//        cout << "try to reconnect" << endl;
 
 		if( deltaTime > 1000 ){
 			weConnected = tcpClient.setup("127.0.0.1", 11999);
@@ -286,16 +301,16 @@ int testApp::recvOnTCP(char* receiveBytes, int numBytes){
 }
 
 void testApp::sendData(){
-//    cout << "Rec buffer dump:" << recBufferSize << endl;
+    cout << "Rec buffer dump:" << recBufferSize << endl;
 //
     for (int i = 0; i < recBufferSize; i++){
 //          recBuffer[i] = i % 2 ? 128 - 8 : 128 + 8;
 //          cout << (int)recBuffer[i] << endl;
     }
 
-    if(speaking){
-        sendOnTCP((char *)recBuffer);
-    }
+//    if(speaking){se
+        sendOnTCP((char *)recBuffer, recBufferCounter, true);
+//    }
 
 //    serial.writeBytes(recBuffer, recBufferSize);
 
@@ -304,26 +319,24 @@ void testApp::sendData(){
     memset(recBuffer, 0, recBufferSize);
 }
 
-
-
 //--------------------------------------------------------------
 void testApp::audioOut(float * output, int bufferSize, int nChannels){
     assert(playBufferCounter >= 0);
-    if(playBufferCounter > 0){
-        cout << "Audio out (bufsize: " << bufferSize << ", playBufferCounter" << playBufferCounter << endl;
+
+    if(playBufferCounter < 128){
+        return;
     }
 
     // up sampling from 8000hz -> 48000hz
     int frame = 0;
     for (int i = 0; i < bufferSize; i++){
-        frame = floor(i / 6);
+        frame = floor(i / 7);
 
         float sample = (((float)(playBuffer[frame]) - 128) / 256) * 0.5;
-
+//        cout << (unsigned short)playBuffer[frame] << ": " << sample << endl;
         if(playBuffer[frame] == 0){
             sample = 0;
         }
-//        cout << (unsigned short)playBuffer[frame] << ": " << sample << endl;
 
         output[i*2    ] = sample;
         output[i*2 + 1] = sample;
@@ -370,9 +383,11 @@ void testApp::keyPressed(int key){
     string callMsg;
     if( key == 'e' ){
 		soundStream.stop();
+        speaking = false;
 	}
 	if( key == 's' ){
 		soundStream.start();
+        speaking = true;
 	}
 
     if( key == 'a' ){
@@ -384,20 +399,19 @@ void testApp::keyPressed(int key){
     }
 
 	if( key == 'c' ){
+        char callMsg[36] = "00000000calHello world!-----------\n";
+        sendOnTCP(callMsg, 36, false);
 		soundStream.start();
-        char callMsg[36] = "00000000calHello world!------------";
-        sendOnTCP(callMsg);
-        speaking = true;
 	}
     if( key == '1' ){
-        char callMsg[36] = "00000000smsHello world!------------";
-        sendOnTCP(callMsg);
-	}
-	if( key == 'h' ){
-        char callMsg[36] = "00000000endHello world!------------";
-        sendOnTCP(callMsg);
+        char callMsg[36] = "00000000smsHello world!-----------\n";
+        sendOnTCP(callMsg, 36, false);
+	}	if( key == 'h' ){
+        char callMsg[36] = "00000000end-----------------------\n";
+        sendOnTCP(callMsg, 36, false);
         speaking = false;
 		soundStream.stop();
+        tcpClient.close();
 	}
 
 
